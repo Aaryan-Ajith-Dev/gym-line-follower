@@ -62,23 +62,32 @@ class CameraWindow(ReferenceGeometry):
         return geometry.exterior.xy
 
     def visible_points(self, points, return_coords=True):
-        """
-        Determine if points are visible - lying inside polygon
-        :param points: inptu points
-        :param return_coords: True to return coordinates of points, False to return indicies pf visible points in
-        input array
-        :return: see above
-        """
         if not isinstance(points, MultiPoint):
             points = np.array(points)
-            multipoint = MultiPoint(points)  # Convert all points at once to shapely format for performance
+            multipoint = MultiPoint(points)
         else:
             multipoint = points
+
         visible = multipoint.intersection(self.geometry)
-        if return_coords:
-            return np.array(visible).reshape((-1, 2))
-        else:
+
+        if not return_coords:
             return visible
+
+        coords = []
+        if visible.is_empty:
+            return np.zeros((0, 2))  # empty array
+        elif isinstance(visible, Point):
+            coords.append(visible.coords[0])
+        elif hasattr(visible, 'geoms'):
+            for geom in visible.geoms:
+                if isinstance(geom, Point):
+                    coords.append(geom.coords[0])
+        else:
+            # Unknown geometry type
+            return np.zeros((0, 2))
+
+        return np.array(coords)
+
 
     def convert_to_local(self, geom):
         """
@@ -94,8 +103,17 @@ class CameraWindow(ReferenceGeometry):
         return out
 
     def convert_points_to_local(self, points):
-        out = self.convert_to_local(MultiPoint(points))
-        return np.array(out)
+        geom = self.convert_to_local(MultiPoint(points))
+        if geom.is_empty:
+            return np.zeros((0, 2))
+        elif isinstance(geom, Point):
+            return np.array([geom.coords[0]])
+        elif hasattr(geom, 'geoms'):
+            coords = [pt.coords[0] for pt in geom.geoms if isinstance(pt, Point)]
+            return np.array(coords)
+        else:
+            return np.zeros((0, 2))
+
 
     def get_local_window(self):
         return self.__class__(self.window_points, self.origin, self.origin_angle)
